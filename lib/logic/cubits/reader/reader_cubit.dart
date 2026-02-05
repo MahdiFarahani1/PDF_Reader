@@ -4,24 +4,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 import 'package:epubx/epubx.dart' as epub;
 import '../../../data/models/bookmark_model.dart';
-import '../../../data/models/highlight_model.dart';
 import '../../../data/models/document_model.dart';
 import '../../../data/models/search_result_model.dart';
 import '../../../data/repositories/bookmark_repository.dart';
-import '../../../data/repositories/highlight_repository.dart';
 import '../library/library_cubit.dart';
 import 'reader_state.dart';
 
 class ReaderCubit extends Cubit<ReaderState> {
   final BookmarkRepository _bookmarkRepository;
-  final HighlightRepository _highlightRepository;
   final LibraryCubit _libraryCubit;
 
-  ReaderCubit(
-    this._bookmarkRepository,
-    this._highlightRepository,
-    this._libraryCubit,
-  ) : super(const ReaderState());
+  ReaderCubit(this._bookmarkRepository, this._libraryCubit)
+    : super(const ReaderState());
 
   // Initialize reader for a document
   Future<void> initializeDocument(
@@ -32,11 +26,8 @@ class ReaderCubit extends Cubit<ReaderState> {
     emit(state.copyWith(status: ReaderStatus.loading));
 
     try {
-      // Load bookmarks and highlights
+      // Load bookmarks
       final bookmarks = await _bookmarkRepository.getBookmarksForDocument(
-        documentId,
-      );
-      final highlights = await _highlightRepository.getHighlightsForDocument(
         documentId,
       );
 
@@ -47,7 +38,6 @@ class ReaderCubit extends Cubit<ReaderState> {
           currentPage: savedPage,
           currentPosition: savedPosition,
           bookmarks: bookmarks,
-          highlights: highlights,
         ),
       );
     } catch (e) {
@@ -120,65 +110,6 @@ class ReaderCubit extends Cubit<ReaderState> {
         state.documentId!,
       );
       emit(state.copyWith(bookmarks: bookmarks));
-    }
-  }
-
-  // Add highlight
-  Future<void> addHighlight({
-    required String selectedText,
-    int? pageNumber,
-    int? startPosition,
-    int? endPosition,
-    required Color color,
-    String? note,
-  }) async {
-    if (state.documentId == null) return;
-
-    final highlight = HighlightModel(
-      id: const Uuid().v4(),
-      documentId: state.documentId!,
-      selectedText: selectedText,
-      pageNumber: pageNumber,
-      startPosition: startPosition,
-      endPosition: endPosition,
-      color: color,
-      note: note,
-      createdAt: DateTime.now(),
-    );
-
-    await _highlightRepository.addHighlight(highlight);
-
-    // Reload highlights
-    final highlights = await _highlightRepository.getHighlightsForDocument(
-      state.documentId!,
-    );
-    emit(state.copyWith(highlights: highlights));
-  }
-
-  // Update highlight note
-  Future<void> updateHighlightNote(String highlightId, String note) async {
-    final highlight = state.highlights.firstWhere((h) => h.id == highlightId);
-    final updated = highlight.copyWith(note: note, updatedAt: DateTime.now());
-
-    await _highlightRepository.updateHighlight(updated);
-
-    if (state.documentId != null) {
-      final highlights = await _highlightRepository.getHighlightsForDocument(
-        state.documentId!,
-      );
-      emit(state.copyWith(highlights: highlights));
-    }
-  }
-
-  // Remove highlight
-  Future<void> removeHighlight(String highlightId) async {
-    await _highlightRepository.removeHighlight(highlightId);
-
-    if (state.documentId != null) {
-      final highlights = await _highlightRepository.getHighlightsForDocument(
-        state.documentId!,
-      );
-      emit(state.copyWith(highlights: highlights));
     }
   }
 

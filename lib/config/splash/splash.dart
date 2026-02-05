@@ -63,7 +63,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
               const SizedBox(height: 10),
               Text(
-                'خوان PDF|خوانا',
+                ' PDF خوان |خوانا',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,

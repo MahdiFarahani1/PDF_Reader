@@ -9,7 +9,6 @@ import 'core/services/auth_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/theme/app_theme.dart';
 import 'data/repositories/bookmark_repository.dart';
-import 'data/repositories/highlight_repository.dart';
 import 'core/utils/app_localizations.dart';
 import 'logic/cubits/auth/auth_cubit.dart';
 import 'logic/cubits/auth/auth_state.dart';
@@ -30,14 +29,12 @@ void main() async {
   // Initialize services
   final authService = AuthService(storageService);
   final bookmarkRepository = BookmarkRepository(storageService);
-  final highlightRepository = HighlightRepository(storageService);
 
   runApp(
     MyApp(
       storageService: storageService,
       authService: authService,
       bookmarkRepository: bookmarkRepository,
-      highlightRepository: highlightRepository,
     ),
   );
 }
@@ -46,14 +43,12 @@ class MyApp extends StatelessWidget {
   final StorageService storageService;
   final AuthService authService;
   final BookmarkRepository bookmarkRepository;
-  final HighlightRepository highlightRepository;
 
   const MyApp({
     super.key,
     required this.storageService,
     required this.authService,
     required this.bookmarkRepository,
-    required this.highlightRepository,
   });
 
   @override
@@ -64,11 +59,8 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (context) => LibraryCubit(storageService)),
         BlocProvider(create: (context) => AuthCubit(authService)),
         BlocProvider(
-          create: (context) => ReaderCubit(
-            bookmarkRepository,
-            highlightRepository,
-            context.read<LibraryCubit>(),
-          ),
+          create: (context) =>
+              ReaderCubit(bookmarkRepository, context.read<LibraryCubit>()),
         ),
       ],
       child: BlocBuilder<SettingsCubit, SettingsState>(

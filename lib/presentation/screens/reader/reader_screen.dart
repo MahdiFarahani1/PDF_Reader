@@ -5,7 +5,6 @@ import 'package:flutter_application_1/logic/cubits/settings/cubit/settings_cubit
 import 'package:flutter_application_1/logic/cubits/settings/cubit/settings_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pdfx/pdfx.dart' as pdf;
-import 'package:flutter_epub_viewer/flutter_epub_viewer.dart';
 import 'package:open_filex/open_filex.dart';
 import '../../../core/utils/app_localizations.dart';
 import '../../../data/models/document_model.dart';
@@ -32,7 +31,6 @@ class ReaderScreen extends StatefulWidget {
 class _ReaderScreenState extends State<ReaderScreen>
     with SingleTickerProviderStateMixin {
   pdf.PdfController? _pdfController;
-  final EpubController _epubController = EpubController();
   final ScrollController _txtScrollController = ScrollController();
 
   bool _isLoading = true;
@@ -41,8 +39,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _showControls = true;
   int? _currentPage;
   int? _totalPages;
-  String? _currentEpubCfi;
-  double _epubProgress = 0.0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   late AnimationController _controlsAnimationController;
@@ -120,11 +116,9 @@ class _ReaderScreenState extends State<ReaderScreen>
           _totalPages = pdfDocument.pagesCount;
           _currentPage = widget.document.currentPage ?? 1;
         });
-      } else if (widget.document.fileType == FileType.epub) {
-        // For EPUB, flutter_epub_viewer will handle it in the UI
-        // No special initialization needed
       } else if (widget.document.fileType == FileType.sheet ||
-          widget.document.fileType == FileType.word) {
+          widget.document.fileType == FileType.word ||
+          widget.document.fileType == FileType.epub) {
         // No detailed initialization needed for external files
       }
     } catch (e) {
@@ -417,12 +411,11 @@ class _ReaderScreenState extends State<ReaderScreen>
                 ),
               ),
 
-            // Page Slider for PDF and EPUB
+            // Page Slider for PDF only
             if (!_isLoading &&
-                (widget.document.fileType == FileType.pdf ||
-                    widget.document.fileType == FileType.epub) &&
-                (widget.document.fileType == FileType.epub ||
-                    (_totalPages != null && _currentPage != null)))
+                widget.document.fileType == FileType.pdf &&
+                _totalPages != null &&
+                _currentPage != null)
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -468,9 +461,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            widget.document.fileType == FileType.pdf
-                                ? '${loc.page} $_currentPage ${loc.offf} $_totalPages'
-                                : '${(_epubProgress * 100).toInt()}%',
+                            '${loc.page} $_currentPage ${loc.offf} $_totalPages',
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   fontWeight: FontWeight.w600,
@@ -497,12 +488,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                                 width: 24,
                                 height: 24,
                               ),
-                              onPressed:
-                                  widget.document.fileType == FileType.pdf
-                                  ? (_currentPage! > 1
-                                        ? () => _pdfController?.jumpToPage(1)
-                                        : null)
-                                  : null, // No "jump to start" for EPUB yet
+                              onPressed: _currentPage! > 1
+                                  ? () => _pdfController?.jumpToPage(1)
+                                  : null,
                             ),
                             // Previous Page Button
                             IconButton(
@@ -517,19 +505,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                                 width: 24,
                                 height: 24,
                               ),
-                              onPressed:
-                                  widget.document.fileType == FileType.pdf
-                                  ? (_currentPage! > 1
-                                        ? () {
-                                            final target = _currentPage! - 1;
-                                            if (target >= 1) {
-                                              _pdfController?.jumpToPage(
-                                                target,
-                                              );
-                                            }
-                                          }
-                                        : null)
-                                  : () => _epubController.prev(),
+                              onPressed: _currentPage! > 1
+                                  ? () {
+                                      final target = _currentPage! - 1;
+                                      if (target >= 1) {
+                                        _pdfController?.jumpToPage(target);
+                                      }
+                                    }
+                                  : null,
                             ),
                             // Slider
                             Expanded(
@@ -545,48 +528,15 @@ class _ReaderScreenState extends State<ReaderScreen>
                                   ),
                                 ),
                                 child: Slider(
-                                  value:
-                                      widget.document.fileType == FileType.pdf
-                                      ? _currentPage!.toDouble()
-                                      : _epubProgress,
-                                  min: widget.document.fileType == FileType.pdf
-                                      ? 1
-                                      : 0.0,
-                                  max: widget.document.fileType == FileType.pdf
-                                      ? _totalPages!.toDouble()
-                                      : 1.0,
-                                  divisions:
-                                      widget.document.fileType == FileType.pdf
-                                      ? (_totalPages! > 1
-                                            ? _totalPages! - 1
-                                            : 1)
-                                      : 100,
-                                  label:
-                                      widget.document.fileType == FileType.pdf
-                                      ? '$_currentPage'
-                                      : '${(_epubProgress * 100).toInt()}%',
+                                  value: _currentPage!.toDouble(),
+                                  min: 1.0,
+                                  max: _totalPages!.toDouble(),
+                                  divisions: _totalPages! > 1
+                                      ? _totalPages! - 1
+                                      : 1,
+                                  label: '$_currentPage',
                                   onChanged: (value) {
-                                    if (widget.document.fileType ==
-                                        FileType.pdf) {
-                                      _pdfController?.jumpToPage(value.toInt());
-                                    } else {
-                                      // Update state instantly for UI feedback
-                                      setState(() {
-                                        _epubProgress = value;
-                                      });
-                                    }
-                                  },
-                                  onChangeEnd: (value) {
-                                    // Navigate only on end for EPUB to avoid performance issues
-                                    if (widget.document.fileType ==
-                                        FileType.epub) {
-                                      // _epubController.toProgressPercentage(value); // Not available in widget
-                                      // Fallback: Use goto logic if percentages are supported via CFI or search
-                                      // Current flutter_epub_viewer doesn't expose explicit percentage jump easily
-                                      // But let's check if we can simulate it or if access is available
-                                      // For now, disabling slider dragging for EPUB effectively or keeping it read-only
-                                      // until we confirm API
-                                    }
+                                    _pdfController?.jumpToPage(value.toInt());
                                   },
                                 ),
                               ),
@@ -604,19 +554,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                                 width: 24,
                                 height: 24,
                               ),
-                              onPressed:
-                                  widget.document.fileType == FileType.pdf
-                                  ? (_currentPage! < _totalPages!
-                                        ? () {
-                                            final target = _currentPage! + 1;
-                                            if (target <= _totalPages!) {
-                                              _pdfController?.jumpToPage(
-                                                target,
-                                              );
-                                            }
-                                          }
-                                        : null)
-                                  : () => _epubController.next(),
+                              onPressed: _currentPage! < _totalPages!
+                                  ? () {
+                                      final target = _currentPage! + 1;
+                                      if (target <= _totalPages!) {
+                                        _pdfController?.jumpToPage(target);
+                                      }
+                                    }
+                                  : null,
                             ),
                             // Next/End Button
                             IconButton(
@@ -631,14 +576,10 @@ class _ReaderScreenState extends State<ReaderScreen>
                                 width: 24,
                                 height: 24,
                               ),
-                              onPressed:
-                                  widget.document.fileType == FileType.pdf
-                                  ? (_currentPage! < _totalPages!
-                                        ? () => _pdfController?.jumpToPage(
-                                            _totalPages!,
-                                          )
-                                        : null)
-                                  : null, // No "jump to end" for EPUB yet
+                              onPressed: _currentPage! < _totalPages!
+                                  ? () =>
+                                        _pdfController?.jumpToPage(_totalPages!)
+                                  : null,
                             ),
                           ],
                         ),
@@ -741,60 +682,6 @@ class _ReaderScreenState extends State<ReaderScreen>
               );
             }
 
-          case FileType.epub:
-            return GestureDetector(
-              onTap: _toggleControls,
-              behavior: HitTestBehavior
-                  .opaque, // Ensure it captures if not consumed? But we want to *pass through* if consumed.
-              // Actually, opaque might block the webview.
-              // Let's try wrapping without opaque first, or use Listener if needed.
-              // But standard GestureDetector on top of webview often fails.
-              // However, since we want to *toggle*, maybe we can just overlay a transparent detector?
-              // No, that blocks interaction.
-              // Let's try GestureDetector around it. If it doesn't work, we'll need a Stack with Listener.
-              child: EpubViewer(
-                epubSource: EpubSource.fromFile(File(widget.document.path)),
-                epubController: _epubController,
-                displaySettings: EpubDisplaySettings(
-                  flow: EpubFlow.paginated,
-                  snap: true,
-                ),
-                onEpubLoaded: () async {
-                  debugPrint('EPUB loaded successfully');
-                },
-                onRelocated: (location) {
-                  // Debug EPUB location structure
-                  debugPrint('EPUB Relocated Object: $location');
-
-                  // Try to extract cfi and progress dynamically since types are uncertain
-                  try {
-                    final dynamic loc = location;
-                    // Attempt to get CFI
-                    String? cfi;
-                    try {
-                      cfi = loc.cfi;
-                    } catch (_) {}
-                    try {
-                      cfi ??= loc.start.cfi;
-                    } catch (_) {}
-
-                    if (cfi != null && mounted) {
-                      setState(() {
-                        _currentEpubCfi = cfi;
-                      });
-                    }
-
-                    // Attempt to get Progress (0.0 - 1.0)
-                    // Some plugins return 'progress' or need calculation
-                    // For now, if we can't get it, we default to 0.0
-                    // Note: flutter_epub_viewer might not expose progress in location directly
-                  } catch (e) {
-                    debugPrint('Error parsing EPUB location: $e');
-                  }
-                },
-              ),
-            );
-
           case FileType.txt:
             return _buildTextViewer(settings);
 
@@ -808,7 +695,8 @@ class _ReaderScreenState extends State<ReaderScreen>
             if (ext == 'xlsx' ||
                 ext == 'xls' ||
                 ext == 'docx' ||
-                ext == 'doc') {
+                ext == 'doc' ||
+                ext == 'epub') {
               return _buildExternalFileViewer();
             }
             return Center(
@@ -859,15 +747,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                     settings,
                     Theme.of(context),
                   ),
-                  onSelectionChanged: (selection, cause) {
-                    if (selection.start != selection.end) {
-                      final selectedText = content.substring(
-                        selection.start,
-                        selection.end,
-                      );
-                      _showHighlightOptions(selectedText);
-                    }
-                  },
                 ),
               ),
             ),
@@ -933,8 +812,10 @@ class _ReaderScreenState extends State<ReaderScreen>
               width: 20,
               height: 20,
             ),
-            label: const Text('Open with External App'),
+            label: Text(loc.openWithExternal),
             style: ElevatedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              backgroundColor: Theme.of(context).colorScheme.primary,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             ),
           ),
@@ -1074,115 +955,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           );
         }
       }
-    } else if (widget.document.fileType == FileType.epub) {
-      // For EPUB, we use CFI if available
-      if (_currentEpubCfi != null) {
-        await readerCubit.addBookmark(
-          cfi: _currentEpubCfi,
-          label: 'Bookmark', // TODO: Add better label based on chapter/location
-        );
-        if (mounted) {
-          AppSnackBar.showSuccess(
-            context,
-            AppLocalizations.of(context).addBookmark,
-          );
-        }
-      } else {
-        // Fallback or warning if CFI not available
-        if (mounted) {
-          AppSnackBar.showError(
-            context,
-            'Unable to bookmark this location yet.',
-          );
-        }
-      }
     }
-  }
-
-  void _showHighlightOptions(String selectedText) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              AppLocalizations.of(context).highlightText,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              alignment: WrapAlignment.center,
-              children: [
-                _colorButton(Colors.yellow.shade300, selectedText, 'Yellow'),
-                _colorButton(Colors.green.shade300, selectedText, 'Green'),
-                _colorButton(Colors.blue.shade300, selectedText, 'Blue'),
-                _colorButton(Colors.pink.shade300, selectedText, 'Pink'),
-                _colorButton(Colors.orange.shade300, selectedText, 'Orange'),
-              ],
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _colorButton(Color color, String text, String label) {
-    return InkWell(
-      onTap: () {
-        context.read<ReaderCubit>().addHighlight(
-          selectedText: text,
-          pageNumber: _currentPage,
-          color: color,
-        );
-        Navigator.pop(context);
-        AppSnackBar.showSuccess(context, 'Highlighted with $label');
-      },
-      borderRadius: BorderRadius.circular(30),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outline,
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.4),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-    );
   }
 
   void _showReadingSettings() {
@@ -1369,9 +1142,6 @@ class _ReaderScreenState extends State<ReaderScreen>
                         if (widget.document.fileType == FileType.pdf &&
                             bookmark.pageNumber != null) {
                           _pdfController?.jumpToPage(bookmark.pageNumber!);
-                        } else if (widget.document.fileType == FileType.epub &&
-                            bookmark.cfi != null) {
-                          _epubController.display(cfi: bookmark.cfi!);
                         }
                       },
                       trailing: IconButton(
